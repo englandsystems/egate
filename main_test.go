@@ -118,6 +118,38 @@ func TestLoginCreatesSession(t *testing.T) {
 	if len(w.Result().Cookies()) == 0 || w.Result().Cookies()[0].Name != "egate_session" {
 		t.Fatal("session cookie not set")
 	}
+	if location := w.Header().Get("Location"); location != "/admin" {
+		t.Fatalf("location = %q, want /admin", location)
+	}
+}
+
+func TestPublicDocumentationAtRoot(t *testing.T) {
+	a := testApp(t, 5)
+	r := httptest.NewRequest(http.MethodGet, "/", nil)
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "API documentation") || !strings.Contains(body, "POST</span> /v1/email") {
+		t.Fatalf("root did not render API documentation: %s", body)
+	}
+	if strings.Contains(body, `href="/login"`) {
+		t.Fatal("public documentation advertises the private login route")
+	}
+}
+
+func TestAdminRequiresLogin(t *testing.T) {
+	a := testApp(t, 5)
+	r := httptest.NewRequest(http.MethodGet, "/admin", nil)
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+
+	if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/login" {
+		t.Fatalf("status = %d, location = %q", w.Code, w.Header().Get("Location"))
+	}
 }
 
 func TestLoginBanAtThreshold(t *testing.T) {

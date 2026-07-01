@@ -200,7 +200,8 @@ func (a *app) routes() http.Handler {
 	m.HandleFunc("GET /login", a.loginPage)
 	m.HandleFunc("POST /login", a.login)
 	m.HandleFunc("POST /logout", a.requireAdmin(a.logout))
-	m.HandleFunc("GET /", a.requireAdmin(a.dashboard))
+	m.HandleFunc("GET /", a.docsPage)
+	m.HandleFunc("GET /admin", a.requireAdmin(a.dashboard))
 	m.HandleFunc("POST /keys", a.requireAdmin(a.createKey))
 	m.HandleFunc("POST /keys/{id}/revoke", a.requireAdmin(a.revokeKey))
 	m.HandleFunc("POST /v1/email", a.requireAPIKey(a.sendEmail))
@@ -241,6 +242,9 @@ func (a *app) cleanup() {
 func (a *app) loginPage(w http.ResponseWriter, r *http.Request) {
 	a.render(w, "login.html", pageData{})
 }
+func (a *app) docsPage(w http.ResponseWriter, r *http.Request) {
+	a.render(w, "docs.html", pageData{})
+}
 func (a *app) login(w http.ResponseWriter, r *http.Request) {
 	a.cleanup()
 	ip := clientIP(r)
@@ -277,7 +281,7 @@ func (a *app) login(w http.ResponseWriter, r *http.Request) {
 	raw, csrf := token(32), token(24)
 	a.db.Exec(`INSERT INTO sessions(token_hash,csrf_token,expires_at) VALUES(?,?,?)`, hash(raw), csrf, time.Now().Add(12*time.Hour).Unix())
 	http.SetCookie(w, &http.Cookie{Name: "egate_session", Value: raw, Path: "/", HttpOnly: true, Secure: r.TLS != nil, SameSite: http.SameSiteStrictMode, MaxAge: 43200})
-	http.Redirect(w, r, "/", http.StatusSeeOther)
+	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 
 func (a *app) session(r *http.Request) (string, bool) {
@@ -359,7 +363,7 @@ func (a *app) revokeKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.db.Exec(`UPDATE api_keys SET revoked_at=? WHERE id=? AND revoked_at IS NULL`, time.Now().Unix(), id)
-	http.Redirect(w, r, "/", 303)
+	http.Redirect(w, r, "/admin", 303)
 }
 
 func (a *app) requireAPIKey(next http.HandlerFunc) http.HandlerFunc {

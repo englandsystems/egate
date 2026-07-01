@@ -1,6 +1,6 @@
 IMAGE ?= egate:latest
 CONTAINER ?= egate
-PORT ?= 11111
+PORT ?= 54283
 
 .PHONY: init docker docker-build docker-stop docker-logs
 
