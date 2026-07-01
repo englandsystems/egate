@@ -49,6 +49,22 @@ func TestReadConfigPort(t *testing.T) {
 	}
 }
 
+func TestReadConfigHost(t *testing.T) {
+	t.Setenv("EGATE_DB", "test.sqlite3")
+	t.Setenv("EGATE_ADMIN_USERNAME", "admin")
+	t.Setenv("EGATE_ADMIN_PASSWORD", "password")
+	t.Setenv("EGATE_POSTMARK_API_KEY", "test")
+	t.Setenv("EGATE_HOST", "0.0.0.0")
+
+	cfg, err := readConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Listen != "0.0.0.0:54283" {
+		t.Fatalf("listen=%q", cfg.Listen)
+	}
+}
+
 func TestReadConfigRejectsInvalidPort(t *testing.T) {
 	t.Setenv("EGATE_DB", "test.sqlite3")
 	t.Setenv("EGATE_ADMIN_USERNAME", "admin")

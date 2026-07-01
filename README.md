@@ -14,6 +14,23 @@ The initializer refuses to overwrite an existing file and creates it with owner-
 
 The database and all tables are created automatically. The configured admin account is synchronized on every startup. By default egate listens on its standard port, `54283`; change `EGATE_PORT` in `.env` if needed. Open `http://127.0.0.1:54283`, sign in, and create an API key.
 
+## Docker
+
+Build the image, initialize `.env` and `./data` when absent, and start the container:
+
+```sh
+make docker
+```
+
+On the first run, stop the container, replace the starter admin password and Postmark token in `.env`, then run `make docker` again. The SQLite database is stored in the host's ignored `./data` directory and mounted at `/app/data`. The container is named `egate`, publishes port `54283`, and restarts unless stopped.
+
+Useful commands:
+
+```sh
+make docker-logs
+make docker-stop
+```
+
 In production, put egate behind a TLS reverse proxy. By design, login rate limiting uses the direct peer IP and does not trust `X-Forwarded-For`; ensure the proxy itself limits abusive clients or restrict access to the admin UI.
 
 ## Send an email

@@ -29,8 +29,8 @@ import (
 var templateFiles embed.FS
 
 type config struct {
-	DB, Username, Password, PostmarkKey, Listen string
-	Port, MaxAttempts                           int
+	DB, Username, Password, PostmarkKey, Host, Listen string
+	Port, MaxAttempts                                 int
 }
 
 const defaultPort = 54283
@@ -90,7 +90,7 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
-const starterEnv = `EGATE_DB=./egate.sqlite3
+const starterEnv = `EGATE_DB=./data/egate.sqlite3
 EGATE_ADMIN_USERNAME=admin
 EGATE_ADMIN_PASSWORD=replace-with-a-long-random-password
 EGATE_POSTMARK_API_KEY=invalid-replace-with-postmark-server-token
@@ -143,7 +143,7 @@ func loadEnv(path string) error {
 }
 
 func readConfig() (config, error) {
-	c := config{DB: os.Getenv("EGATE_DB"), Username: os.Getenv("EGATE_ADMIN_USERNAME"), Password: os.Getenv("EGATE_ADMIN_PASSWORD"), PostmarkKey: os.Getenv("EGATE_POSTMARK_API_KEY"), Port: defaultPort, MaxAttempts: 5}
+	c := config{DB: os.Getenv("EGATE_DB"), Username: os.Getenv("EGATE_ADMIN_USERNAME"), Password: os.Getenv("EGATE_ADMIN_PASSWORD"), PostmarkKey: os.Getenv("EGATE_POSTMARK_API_KEY"), Host: "127.0.0.1", Port: defaultPort, MaxAttempts: 5}
 	for k, v := range map[string]string{"EGATE_DB": c.DB, "EGATE_ADMIN_USERNAME": c.Username, "EGATE_ADMIN_PASSWORD": c.Password, "EGATE_POSTMARK_API_KEY": c.PostmarkKey} {
 		if v == "" {
 			return c, fmt.Errorf("%s is required", k)
@@ -156,7 +156,10 @@ func readConfig() (config, error) {
 		}
 		c.Port = n
 	}
-	c.Listen = net.JoinHostPort("127.0.0.1", strconv.Itoa(c.Port))
+	if v := os.Getenv("EGATE_HOST"); v != "" {
+		c.Host = v
+	}
+	c.Listen = net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
 	if v := os.Getenv("EGATE_LOGIN_MAX_ATTEMPTS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil || n < 1 {
