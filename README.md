@@ -12,14 +12,14 @@ go run . --env ./.env
 
 The initializer refuses to overwrite an existing file and creates it with owner-only permissions. Its Postmark token is intentionally invalid and must be replaced before email delivery will work.
 
-The database and all tables are created automatically. The configured admin account is synchronized on every startup. Open `http://127.0.0.1:8080`, sign in, and create an API key.
+The database and all tables are created automatically. The configured admin account is synchronized on every startup. By default egate listens on its standard port, `54283`; change `EGATE_PORT` in `.env` if needed. Open `http://127.0.0.1:54283`, sign in, and create an API key.
 
 In production, put egate behind a TLS reverse proxy. By design, login rate limiting uses the direct peer IP and does not trust `X-Forwarded-For`; ensure the proxy itself limits abusive clients or restrict access to the admin UI.
 
 ## Send an email
 
 ```sh
-curl http://127.0.0.1:8080/v1/email \
+curl http://127.0.0.1:54283/v1/email \
   -H 'Authorization: Bearer eg_YOUR_KEY' \
   -H 'Content-Type: application/json' \
   -d '{
