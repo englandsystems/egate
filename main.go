@@ -52,9 +52,30 @@ type pageData struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "teach" {
+		if len(os.Args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: egate teach PATH")
+			os.Exit(2)
+		}
+		if err := teach(os.Args[2]); err != nil {
+			log.Fatal(err)
+		}
+		log.Printf("wrote egate SDK guide to %s", os.Args[2])
+		return
+	}
+	flag.Usage = func() { printHelp(flag.CommandLine.Output()) }
 	envPath := flag.String("env", "", "path to the required environment file")
 	initEnvPath := flag.String("init-env", "", "create a starter environment file and exit")
 	flag.Parse()
+	if flag.NArg() == 1 && flag.Arg(0) == "help" {
+		printHelp(os.Stdout)
+		return
+	}
+	if flag.NArg() != 0 {
+		fmt.Fprintf(os.Stderr, "egate: unknown command or argument %q\n\n", flag.Arg(0))
+		printHelp(os.Stderr)
+		os.Exit(2)
+	}
 	if *initEnvPath != "" {
 		if err := initEnv(*initEnvPath); err != nil {
 			log.Fatal(err)
@@ -88,6 +109,177 @@ func main() {
 	srv := &http.Server{Addr: cfg.Listen, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 20 * time.Second, IdleTimeout: 60 * time.Second}
 	log.Printf("egate listening on %s", cfg.Listen)
 	log.Fatal(srv.ListenAndServe())
+}
+
+func printHelp(w io.Writer) {
+	fmt.Fprint(w, `egate - a small application-to-application email gateway
+
+USAGE
+  egate help
+  egate teach PATH
+  egate --init-env PATH
+  egate --env PATH
+
+QUICK START
+  1. Create a starter configuration file:
+       egate --init-env .env
+
+  2. Edit .env and replace the starter admin password and Postmark token.
+
+  3. Start the server:
+       egate --env ./.env
+
+  4. Open http://127.0.0.1:54283 in a browser for API documentation.
+     Sign in at http://127.0.0.1:54283/login to create and revoke API keys.
+
+TEACH AN AGENT
+  Write a self-contained guide to using the Go SDK into another repository:
+       egate teach ./EGATE.md
+
+  Running the command again replaces the guide with the version shipped in
+  the current egate binary.
+
+OPTIONS
+  --init-env PATH  Create a starter environment file and exit.
+                   Existing files are never overwritten.
+  --env PATH       Load configuration from PATH and start the server.
+  -h, --help       Show this help and exit.
+
+REQUIRED CONFIGURATION
+  EGATE_DB                  SQLite database path, for example ./data/egate.sqlite3
+  EGATE_ADMIN_USERNAME      Administrator sign-in username
+  EGATE_ADMIN_PASSWORD      Administrator sign-in password
+  EGATE_POSTMARK_API_KEY    Postmark server API token used to deliver email
+
+OPTIONAL CONFIGURATION
+  EGATE_HOST                Listen address (default: 127.0.0.1)
+  EGATE_PORT                Listen port (default: 54283)
+  EGATE_LOGIN_MAX_ATTEMPTS  Failed logins allowed per IP in 24 hours (default: 5)
+
+SEND AN EMAIL
+  First create an API key in the admin page, then send a request like this:
+
+  curl http://127.0.0.1:54283/v1/email \
+    -H 'Authorization: Bearer eg_YOUR_KEY' \
+    -H 'Content-Type: application/json' \
+    -d '{"from":"sender@example.com","to":"recipient@example.com","subject":"Hello","text_body":"Sent through egate"}'
+
+NOTES
+  The SQLite database and tables are created automatically on first startup.
+  Put egate behind a TLS reverse proxy before exposing it in production.
+`)
+}
+
+const sdkGuide = `# Using the egate SDK
+
+This repository may use egate to send transactional email. egate is a small HTTP gateway backed by Postmark. Use its Go SDK instead of calling the email provider directly.
+
+## Package and configuration
+
+Install the module:
+
+~~~sh
+go get github.com/englandsystems/egate
+~~~
+
+Import ` + "`github.com/englandsystems/egate/sdk`" + `. Applications must provide both values below; the SDK has no default server:
+
+- ` + "`EGATE_HOST`" + `: absolute base URL of the deployed gateway, such as ` + "`https://egate.example.com`" + `. A path prefix is allowed. Do not append ` + "`/v1/email`" + `.
+- ` + "`EGATE_API_KEY`" + `: bearer API key created by an egate administrator. Treat it as a secret: never commit, print, or return it in errors.
+
+## Send an email
+
+~~~go
+package notifications
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/englandsystems/egate/sdk"
+)
+
+func SendWelcome(ctx context.Context, recipient string) error {
+	client, err := sdk.NewClient(os.Getenv("EGATE_HOST"), os.Getenv("EGATE_API_KEY"))
+	if err != nil {
+		return fmt.Errorf("configure egate: %w", err)
+	}
+
+	_, err = client.SendEmail(ctx, sdk.Email{
+		From:     "Example Team <mail@example.com>",
+		To:       recipient,
+		Subject:  "Welcome",
+		TextBody: "Welcome to Example.",
+		HTMLBody: "<p>Welcome to Example.</p>",
+		ReplyTo:  "support@example.com",
+	})
+	if err != nil {
+		return fmt.Errorf("send welcome email: %w", err)
+	}
+	return nil
+}
+~~~
+
+Pass the request's context when sending from an HTTP handler. For background work, create a context with a deadline. The SDK's default HTTP timeout is 15 seconds.
+
+` + "`sdk.Email`" + ` fields:
+
+- ` + "`From`" + `, ` + "`To`" + `, and ` + "`Subject`" + ` are required non-empty strings.
+- At least one of ` + "`TextBody`" + ` or ` + "`HTMLBody`" + ` is required. Supplying both is preferred for accessibility and client compatibility.
+- ` + "`ReplyTo`" + ` is optional.
+- Sender addresses must be accepted by the Postmark account behind the gateway.
+
+egate currently accepts one recipient string. Do not assume the SDK implements templates, attachments, queues, retries, scheduled delivery, or address validation.
+
+## Handle responses and errors
+
+` + "`SendEmail`" + ` returns ` + "`(*sdk.Response, error)`" + `. A 2xx provider response returns a response and a nil error. Any non-2xx response returns both the response and an ` + "`*sdk.APIError`" + `. Transport, encoding, cancellation, and oversized-response failures may return no response.
+
+~~~go
+response, err := client.SendEmail(ctx, message)
+if err != nil {
+	var apiErr *sdk.APIError
+	if errors.As(err, &apiErr) {
+		// apiErr.StatusCode and apiErr.Body contain the gateway/provider failure.
+		// Do not blindly expose the body to end users.
+	}
+	return err
+}
+
+// Available when provider metadata is needed:
+_ = response.StatusCode
+_ = response.Header
+_ = response.Body
+~~~
+
+Import ` + "`errors`" + ` for ` + "`errors.As`" + `. The gateway passes Postmark's HTTP status and response body through. It can also return local errors such as 400 for an invalid request, 401 for a missing/revoked key, and 502 when the provider is unavailable.
+
+Do not automatically retry every failure. Retries after an ambiguous transport error can duplicate email. If the application retries, limit attempts, use backoff, retry only failures your product explicitly considers transient, and accept the duplicate-delivery risk.
+
+## Customize or test the client
+
+Use ` + "`SetHTTPClient`" + ` to install an ` + "`*http.Client`" + ` with application-specific timeouts, tracing, or a test transport. Passing nil restores the 15-second default.
+
+~~~go
+client.SetHTTPClient(&http.Client{Timeout: 5 * time.Second})
+~~~
+
+Prefer an ` + "`httptest.Server`" + ` as ` + "`EGATE_HOST`" + ` in integration tests. Assert that requests use ` + "`POST /v1/email`" + `, JSON content, and bearer authentication, but never put a real API key in test fixtures.
+
+## HTTP contract (fallback only)
+
+When working in a non-Go component, call ` + "`POST {EGATE_HOST}/v1/email`" + ` with ` + "`Authorization: Bearer {EGATE_API_KEY}`" + ` and ` + "`Content-Type: application/json`" + `. The JSON field names are ` + "`from`" + `, ` + "`to`" + `, ` + "`subject`" + `, ` + "`text_body`" + `, ` + "`html_body`" + `, and ` + "`reply_to`" + `. The Go SDK should remain the default in Go code because it consistently applies authentication, timeouts, response limits, and typed errors.
+`
+
+func teach(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return errors.New("guide path is required")
+	}
+	if err := os.WriteFile(path, []byte(sdkGuide), 0644); err != nil {
+		return fmt.Errorf("write SDK guide: %w", err)
+	}
+	return nil
 }
 
 const starterEnv = `EGATE_DB=./data/egate.sqlite3

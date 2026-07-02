@@ -2,6 +2,16 @@
 
 A small application-to-application email gateway backed by SQLite and Postmark.
 
+## Teach an agent
+
+Generate a self-contained Markdown reference that can be copied into any Go repository where an agent needs to use the egate SDK:
+
+```sh
+egate teach ./EGATE.md
+```
+
+The command writes or replaces the requested file with the guide shipped in the current binary, so rerun it after upgrading egate.
+
 ## Run
 
 ```sh

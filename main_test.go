@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"html/template"
 	"net/http"
@@ -12,6 +13,63 @@ import (
 	"testing"
 	"time"
 )
+
+func TestHelpIsClearAndActionable(t *testing.T) {
+	var out bytes.Buffer
+	printHelp(&out)
+	help := out.String()
+	for _, want := range []string{
+		"egate --init-env .env",
+		"egate teach ./EGATE.md",
+		"egate --env ./.env",
+		"EGATE_POSTMARK_API_KEY",
+		"http://127.0.0.1:54283/login",
+		"Authorization: Bearer eg_YOUR_KEY",
+	} {
+		if !strings.Contains(help, want) {
+			t.Errorf("help is missing %q", want)
+		}
+	}
+}
+
+func TestTeachWritesAgentGuide(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "EGATE.md")
+	if err := teach(path); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	guide := string(b)
+	for _, want := range []string{
+		"github.com/englandsystems/egate/sdk",
+		"EGATE_HOST",
+		"EGATE_API_KEY",
+		"sdk.NewClient",
+		"client.SendEmail",
+		"errors.As(err, &apiErr)",
+		"POST {EGATE_HOST}/v1/email",
+	} {
+		if !strings.Contains(guide, want) {
+			t.Errorf("guide is missing %q", want)
+		}
+	}
+
+	if err := os.WriteFile(path, []byte("stale"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := teach(path); err != nil {
+		t.Fatal(err)
+	}
+	b, err = os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != sdkGuide {
+		t.Fatal("teach did not replace an existing guide")
+	}
+}
 
 func TestInitEnv(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".env")
